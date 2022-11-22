@@ -1,60 +1,83 @@
 import React, { useEffect, useState } from 'react';
-import NoteContainer from './components/NoteContainer/NoteContainer.js';
-import Sidebar from './components/Sidebar/Sidebar';
+import {
+	BrowserRouter as Router,
+	Routes,
+	Route,
+	Navigate,
+} from 'react-router-dom';
+
+import Spinner from './components/Spinner/Spinner';
+import Home from './components/Home/Home';
+import Auth from './components/Auth/Auth';
+import Account from './components/Account/Account';
+
+import { auth, getUserFromDatabase } from './firebase';
 
 import './App.css';
 
 function App() {
-	const [notes, setNotes] = useState(
-		JSON.parse(localStorage.getItem('notes-app')) || []
-	);
+	const [isAuthenticated, setIsAuthenticated] = useState(false);
+	const [userDetails, setUserDetails] = useState({});
+	const [isDataLoaded, setIsDataLoaded] = useState(false);
 
-	const addNote = (color) => {
-		const tempNotes = [...notes];
-
-		tempNotes.push({
-			id: Date.now() + '' + Math.floor(Math.random() * 78),
-			text: '',
-			time: Date.now(),
-			color,
-		});
-		setNotes(tempNotes);
-	};
-
-	const deleteNote = (id) => {
-		const tempNotes = [...notes];
-
-		const index = tempNotes.findIndex((item) => item.id === id);
-		if (index < 0) return;
-
-		tempNotes.splice(index, 1);
-		setNotes(tempNotes);
-	};
-
-	const updateText = (text, id) => {
-		const tempNotes = [...notes];
-
-		const index = tempNotes.findIndex((item) => item.id === id);
-		if (index < 0) return;
-
-		tempNotes[index].text = text;
-		setNotes(tempNotes);
+	const fetchUserDetails = async (uid) => {
+		const userDetails = await getUserFromDatabase(uid);
+		setUserDetails(userDetails);
+		setIsDataLoaded(true);
 	};
 
 	useEffect(() => {
-		localStorage.setItem('notes-app', JSON.stringify(notes));
-	}, [notes]);
+		const listener = auth.onAuthStateChanged((user) => {
+			if (!user) {
+				setIsDataLoaded(true);
+				setIsAuthenticated(false);
+				return;
+			}
+
+			setIsAuthenticated(true);
+			fetchUserDetails(user.uid);
+		});
+
+		return () => listener();
+	}, []);
 
 	return (
 		<div className="App">
-			<Sidebar addNote={addNote} />
-			<NoteContainer
-				notes={notes}
-				deleteNote={deleteNote}
-				updateText={updateText}
-			/>
+			<Router>
+				{isDataLoaded ? (
+					<Routes>
+						{!isAuthenticated && (
+							<>
+								<Route path="/login" element={<Auth />} />
+								<Route
+									path="/signup"
+									element={<Auth signup />}
+								/>
+							</>
+						)}
+						<Route
+							path="/account"
+							element={
+								<Account
+									userDetails={userDetails}
+									auth={isAuthenticated}
+								/>
+							}
+						/>
+						<Route
+							path="/"
+							element={<Home auth={isAuthenticated} />}
+						/>
+						<Route path="/*" element={<Navigate to="/" />} />
+					</Routes>
+				) : (
+					<div className="spinner">
+						<Spinner />
+					</div>
+				)}
+			</Router>
 		</div>
 	);
 }
-
+ 
 export default App;
